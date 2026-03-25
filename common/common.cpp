@@ -1606,7 +1606,7 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
         std::vector<std::string> ban_strings=string_split(files, "\n");
         std::vector<std::string> ban_phrases;
         for (auto& str : ban_strings) {
-            std::erase(str, '"');
+            str.erase(std::remove(str.begin(), str.end(), '"'), str.end());
             if (!str.empty()) {
                 ban_phrases.push_back(str);
             }

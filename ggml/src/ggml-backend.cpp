@@ -14,7 +14,34 @@
 #include <set>
 #include <array>
 #include <chrono>
+#if __cplusplus >= 202002L || (defined(_MSVC_LANG) && _MSVC_LANG >= 202002L)
 #include <barrier>
+using ggml_barrier = std::barrier<>;
+#else
+#include <mutex>
+#include <condition_variable>
+class ggml_barrier {
+    std::mutex mutex_;
+    std::condition_variable cv_;
+    std::size_t threshold_;
+    std::size_t count_;
+    std::size_t generation_;
+public:
+    explicit ggml_barrier(std::ptrdiff_t expected)
+        : threshold_(expected), count_(expected), generation_(0) {}
+    void arrive_and_wait() {
+        std::unique_lock<std::mutex> lock(mutex_);
+        auto gen = generation_;
+        if (--count_ == 0) {
+            generation_++;
+            count_ = threshold_;
+            cv_.notify_all();
+        } else {
+            cv_.wait(lock, [this, gen] { return gen != generation_; });
+        }
+    }
+};
+#endif
 #include <thread>
 #ifdef GGML_USE_OPENMP
 #include <omp.h>
@@ -2271,7 +2298,7 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
 #endif
         if (!work_done) {
 
-        std::barrier barrier(sched->n_backends);
+        ggml_barrier barrier(sched->n_backends);
         auto compute = [sched, &barrier, first_reduce] (int ith) {
 
             struct ggml_backend_sched_split * splits = sched->splits;
